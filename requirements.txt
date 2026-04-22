@@ -1,0 +1,16 @@
+fastapi
+uvicorn[standard]
+python-multipart
+sqlalchemy
+aiosqlite
+google-generativeai
+groq
+pdfplumber
+pillow
+python-dotenv
+pydantic-settings
+fuzzywuzzy
+python-levenshtein
+aiofiles
+pandas
+python-dateutil

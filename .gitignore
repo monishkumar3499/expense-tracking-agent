@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+
+# Database & Sensitive
+*.db
+.env
+uploads/
+
+# Node / Frontend
+node_modules/
+.next/
+out/
+build/
+dist/
+.vercel
+.turbo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project Specific
+backend/models.txt
+backend/expense_tracker.db
+frontend/.env.local

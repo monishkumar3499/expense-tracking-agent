@@ -1,0 +1,81 @@
+@import "tailwindcss";
+
+:root {
+  /* Claude-like Color Palette (Light Mode) */
+  --bg-core: #ffffff;
+  --bg-sidebar: #fcfcfc;
+  --bg-card: #ffffff;
+  --border-subtle: #e5e5e5;
+  --border-bold: #d4d4d4;
+  
+  --text-main: #171717;
+  --text-secondary: #525252;
+  --text-muted: #737373;
+  
+  --accent: #cc9966; /* Elegant gold/tan accent */
+  --accent-light: #fdf5eb;
+  
+  --success: #10b981;
+  --error: #ef4444;
+}
+
+@theme {
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
+}
+
+body {
+  background-color: var(--bg-core);
+  color: var(--text-main);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+@layer components {
+  .claude-card {
+    background-color: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: 1.25rem;
+    padding: 2rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+    transition: all 0.3s ease;
+  }
+  
+  .claude-card:hover {
+    border-color: var(--border-bold);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+  }
+  
+  .claude-input {
+    background-color: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: 0.75rem;
+    padding: 0.875rem 1.25rem;
+    color: var(--text-main);
+    transition: all 0.2s ease;
+  }
+  
+  .claude-input:focus {
+    border-color: var(--accent);
+    outline: none;
+    box-shadow: 0 0 0 1px var(--accent);
+  }
+}
+
+/* Smooth scrollbar for light mode */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-subtle);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-bold);
+}
