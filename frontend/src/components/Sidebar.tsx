@@ -14,6 +14,8 @@ import {
     ChevronRight,
     Sparkles
 } from 'lucide-react'
+import { useStatusLogs } from '@/hooks/useStatusLogs'
+import StatusBadge from './StatusBadge'
 import { useState } from 'react'
 import clsx from 'clsx'
 
@@ -21,8 +23,6 @@ const NAV_ITEMS = [
     { label: 'Finn Assistant', icon: MessageSquare, path: '/chat' },
     { label: 'Overview', icon: LayoutDashboard, path: '/dashboard' },
     { label: 'All Transactions', icon: ReceiptText, path: '/transactions' },
-    { label: 'Budgets', icon: PieChart, path: '/budgets' },
-    { label: 'Savings Goals', icon: Target, path: '/goals' },
     { label: 'Recurring', icon: CreditCard, path: '/subscriptions' },
 ]
 
@@ -39,10 +39,10 @@ export default function Sidebar() {
                 <div className="p-8 flex items-center justify-between">
                     {!isCollapsed && (
                         <div className="flex items-center gap-2 group cursor-default">
-                             <div className="w-8 h-8 rounded-xl bg-[#cc9966] flex items-center justify-center text-white shadow-lg shadow-[#cc9966]/20">
+                            <div className="w-8 h-8 rounded-xl bg-[#cc9966] flex items-center justify-center text-white shadow-lg shadow-[#cc9966]/20">
                                 <Sparkles size={18} />
-                             </div>
-                             <span className="font-bold tracking-tight text-xl text-[#171717]">Finn</span>
+                            </div>
+                            <span className="font-bold tracking-tight text-xl text-[#171717]">Finn</span>
                         </div>
                     )}
                     <button 
@@ -87,7 +87,7 @@ export default function Sidebar() {
 
             {/* Mobile Nav */}
             <nav className="md:hidden fixed bottom-0 left-0 right-0 h-20 bg-white/90 backdrop-blur-xl border-t border-[#e5e5e5] flex items-center justify-around px-4 z-50">
-                {NAV_ITEMS.slice(0, 5).map((item) => {
+                {NAV_ITEMS.slice(0, 4).map((item) => {
                     const isActive = pathname === item.path
                     return (
                         <Link 

@@ -53,7 +53,7 @@ export default function BudgetsPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-8">
                 {loading ? (
-                    [1,2,3,4].map(i => <div key={i} className="h-64 bg-[#f5f5f5] rounded-[2rem] border border-[#e5e5e5] animate-pulse"></div>)
+                    [1, 2, 3, 4].map(i => <div key={i} className="h-64 bg-[#f5f5f5] rounded-[2rem] border border-[#e5e5e5] animate-pulse"></div>)
                 ) : budgets.length === 0 ? (
                     <div className="col-span-full py-32 bg-[#fafafa] border-2 border-dashed border-[#e5e5e5] rounded-[2.5rem] text-center">
                         <div className="w-20 h-20 bg-white border border-[#e5e5e5] rounded-3xl flex items-center justify-center mx-auto mb-6 text-[#d4d4d4] shadow-sm">
@@ -69,7 +69,7 @@ export default function BudgetsPage() {
                             "absolute top-0 left-0 right-0 h-1.5",
                             b.over_budget ? "bg-[#ef4444]" : b.alert ? "bg-[#f59e0b]" : "bg-[#10b981]"
                         )}></div>
-                        
+
                         <div className="flex justify-between items-start mb-8">
                             <div className="flex items-center gap-4">
                                 <div className="w-12 h-12 bg-[#fdf5eb] rounded-2xl flex items-center justify-center text-2xl">
@@ -101,7 +101,7 @@ export default function BudgetsPage() {
 
                             <div className="space-y-3">
                                 <div className="h-2.5 w-full bg-[#f5f5f5] rounded-full overflow-hidden">
-                                    <div 
+                                    <div
                                         className={clsx(
                                             "h-full rounded-full transition-all duration-1000",
                                             b.over_budget ? "bg-[#ef4444]" : b.alert ? "bg-[#f59e0b]" : "bg-[#cc9966]"
@@ -119,12 +119,12 @@ export default function BudgetsPage() {
                         </div>
 
                         <div className="mt-8 pt-6 border-t border-[#f5f5f5] flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-y-2 group-hover:translate-y-0">
-                             <button className="p-2.5 bg-white border border-[#e5e5e5] rounded-xl text-[#a3a3a3] hover:text-[#cc9966] hover:border-[#cc9966] transition-all">
+                            <button className="p-2.5 bg-white border border-[#e5e5e5] rounded-xl text-[#a3a3a3] hover:text-[#cc9966] hover:border-[#cc9966] transition-all">
                                 <Edit2 size={16} />
-                             </button>
-                             <button onClick={() => deleteBudget(b.id, b.category)} className="p-2.5 bg-white border border-[#e5e5e5] rounded-xl text-[#a3a3a3] hover:text-[#ef4444] hover:border-[#ef4444] transition-all">
+                            </button>
+                            <button onClick={() => deleteBudget(b.id, b.category)} className="p-2.5 bg-white border border-[#e5e5e5] rounded-xl text-[#a3a3a3] hover:text-[#ef4444] hover:border-[#ef4444] transition-all">
                                 <Trash2 size={16} />
-                             </button>
+                            </button>
                         </div>
                     </div>
                 ))}

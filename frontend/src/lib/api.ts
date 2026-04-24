@@ -7,12 +7,11 @@ const api = axios.create({
 export default api
 
 export const CATEGORIES = [
-  "Food & Dining", "Transport", "Utilities", "Shopping", "Entertainment",
-  "Healthcare", "Education", "Subscriptions", "Travel", "Groceries", "Miscellaneous"
+  "Food", "Transport", "Utilities", "Shopping", "Entertainment",
+  "Healthcare", "Education", "Miscellaneous"
 ]
 
 export const CATEGORY_EMOJI: Record<string, string> = {
-  "Food & Dining": "🍽️", "Transport": "🚗", "Utilities": "⚡", "Shopping": "🛍️",
-  "Entertainment": "🎬", "Healthcare": "💊", "Education": "📚", "Subscriptions": "🔄",
-  "Travel": "✈️", "Groceries": "🛒", "Miscellaneous": "📦"
+  "Food": "🍽️", "Transport": "🚗", "Utilities": "⚡", "Shopping": "🛍️",
+  "Entertainment": "🎬", "Healthcare": "💊", "Education": "📚", "Miscellaneous": "📦"
 }

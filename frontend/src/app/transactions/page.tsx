@@ -46,15 +46,15 @@ export default function TransactionsPage() {
             </header>
 
             <div className="bg-white border border-[#e5e5e5] rounded-[2.5rem] shadow-sm overflow-hidden flex flex-col transition-all hover:shadow-xl duration-500">
-                <div className="p-8 border-b border-[#e5e5e5] flex items-center justify-between bg-[#fcfcfc]">
+                <div className="p-8 border-b border-[#e5e5e5] flex items-center justify-between bg-[#fcfcfc] gap-6">
                    <div className="relative flex-1 max-w-md">
                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[#d4d4d4]" size={18} />
                         <input 
                             placeholder="Search by merchant..." 
-                            className="w-full bg-white border border-[#e5e5e5] rounded-2xl pl-12 pr-4 py-3 text-sm outline-none focus:border-[#cc9966] transition-all"
+                            className="w-full bg-white border border-[#e5e5e5] rounded-2xl pl-12 pr-4 py-3.5 text-sm outline-none focus:border-[#cc9966] transition-all shadow-sm"
                         />
                    </div>
-                   <button className="flex items-center gap-2 px-4 py-2 text-xs font-bold text-[#737373] hover:text-[#171717] transition-colors">
+                   <button className="flex items-center gap-2 px-6 py-3.5 bg-white border border-[#e5e5e5] rounded-2xl text-xs font-bold text-[#737373] hover:text-[#171717] hover:bg-[#f5f5f5] transition-all shadow-sm">
                         <Filter size={16} /> Filters
                    </button>
                 </div>

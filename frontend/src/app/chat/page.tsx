@@ -7,6 +7,7 @@ import ReactMarkdown from 'react-markdown'
 import toast from 'react-hot-toast'
 import UploadConfirmModal from '@/components/UploadConfirmModal'
 import clsx from 'clsx'
+import { useStatusLogs } from '@/hooks/useStatusLogs'
 
 interface Message {
     role: 'user' | 'assistant'
@@ -23,6 +24,7 @@ const suggestedPrompts = [
 
 export default function ChatPage() {
     const [messages, setMessages] = useState<Message[]>([])
+    const { lastLog } = useStatusLogs()
     const [input, setInput] = useState('')
     const [isLoading, setIsLoading] = useState(false)
     const [uploadData, setUploadData] = useState<any>(null)
@@ -49,7 +51,9 @@ export default function ChatPage() {
 
         try {
             const res = await api.post('/api/chat', { message: text })
-            setMessages(prev => [...prev, { role: 'assistant', content: res.data.response }])
+            // Strip any "Assistant: " or "Assistant: " prefix if the model adds it
+            const cleanResponse = res.data.response.replace(/^(Assistant:\s*|Assistant:\s*)/i, '')
+            setMessages(prev => [...prev, { role: 'assistant', content: cleanResponse }])
         } catch (err) {
             toast.error("I'm having a bit of trouble right now.")
         } finally {
@@ -143,13 +147,21 @@ export default function ChatPage() {
                     ))}
 
                     {isLoading && (
-                        <div className="flex gap-8 animate-pulse">
-                            <div className="w-10 h-10 rounded-2xl bg-[#f5f5f5] border border-[#e5e5e5] flex items-center justify-center">
-                                <Bot size={20} className="text-[#d4d4d4]" />
+                        <div className="flex gap-8 animate-in fade-in duration-500">
+                            <div className="w-10 h-10 rounded-2xl bg-[#fdf5eb] border border-[#f4e2cc] flex items-center justify-center text-[#cc9966]">
+                                <Bot size={20} className="animate-bounce" />
                             </div>
-                            <div className="space-y-3 flex-1 pt-1">
-                                <div className="h-3 w-12 bg-[#f5f5f5] rounded-full"></div>
-                                <div className="h-4 w-1/2 bg-[#f5f5f5] rounded-full"></div>
+                            <div className="flex-1 pt-1 space-y-4">
+                                <div className="flex flex-col gap-3">
+                                    <div className="flex items-center gap-2 px-4 py-2 bg-[#fdf5eb] border border-[#f4e2cc] rounded-2xl w-fit animate-in slide-in-from-left-2 duration-300">
+                                        <span className="text-sm font-bold text-[#cc9966]">{lastLog || "Analyzing..."}</span>
+                                    </div>
+                                    <div className="flex gap-1.5 h-1 items-center ml-2">
+                                        <div className="w-1 h-1 bg-[#cc9966]/20 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                                        <div className="w-1 h-1 bg-[#cc9966]/20 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                                        <div className="w-1 h-1 bg-[#cc9966]/20 rounded-full animate-bounce"></div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     )}

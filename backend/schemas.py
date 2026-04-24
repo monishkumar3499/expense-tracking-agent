@@ -59,3 +59,20 @@ class Goal(GoalBase):
 
 class ChatRequest(BaseModel):
     message: str
+
+class RecurringExpenseBase(BaseModel):
+    merchant: str
+    avg_amount: float
+    category: str = "Miscellaneous"
+    frequency: str = "monthly" # monthly, yearly, 6-months, 3-months
+    last_seen: Optional[date] = None
+    next_expected: Optional[date] = None
+
+class RecurringExpenseCreate(RecurringExpenseBase):
+    pass
+
+class RecurringExpense(RecurringExpenseBase):
+    id: str
+    is_active: bool
+    class Config:
+        from_attributes = True

@@ -6,13 +6,15 @@ from database import SessionLocal, engine, init_db
 from config import settings
 import models, schemas
 from pathlib import Path
-import json, uuid
+import json, uuid, shutil
 from datetime import datetime, date, timedelta
-from ocr import extract_from_file
-from tools import (spending_summary, monthly_trend, budget_status,
+from finance_tools import (spending_summary, monthly_trend, budget_status,
                    detect_anomalies, cash_flow_forecast, detect_recurring, goal_progress, tax_summary, categorise)
-import agent
-from typing import List, Optional
+from graph import ProductionAgent
+import agent # Keep for legacy compatibility during transition if needed
+from typing import List, Optional, AsyncGenerator
+import asyncio
+from logs import log_manager
 
 from contextlib import asynccontextmanager
 
@@ -31,28 +33,83 @@ app.add_middleware(CORSMiddleware,
 )
 Path(settings.upload_dir).mkdir(exist_ok=True)
 
+# ── LOGS ───────────────────────────────────────────────────────────────────
+
+@app.get("/api/status/stream")
+async def stream_logs():
+    from fastapi.responses import StreamingResponse
+    return StreamingResponse(log_manager.subscribe(), media_type="text/event-stream")
+
 # Dependency
 def get_db():
     db = SessionLocal()
     try: yield db
     finally: db.close()
 
-# ── UPLOAD ────────────────────────────────────────────────────────────────────
+# ── UPLOAD & OCR ──────────────────────────────────────────────────────────────
 @app.post("/api/upload")
-async def upload_file(file: UploadFile = File(...)):
-    print(f"📥 [API] Uploading file: {file.filename}")
-    file_path = f"{settings.upload_dir}/{file.filename}"
-    with open(file_path, "wb") as buffer:
-        buffer.write(await file.read())
+@app.post("/api/extract")
+async def upload_and_extract(file: UploadFile = File(...)):
+    log_manager.push(f"Received file: {file.filename}")
+    
+    # Save file to temp location for processing
+    suffix = Path(file.filename or "upload").suffix or ".jpg"
+    temp_path = Path(settings.upload_dir) / f"{uuid.uuid4().hex}{suffix}"
     
     try:
-        data = await extract_from_file(file_path)
-        data["file_id"] = file.filename
-        print(f"✅ [API] OCR Complete for {file.filename}")
-        return data
+        with temp_path.open("wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        
+        # Process with Mistral OCR Pipeline
+        from mistral_pipeline import extract_with_mistral
+        log_manager.push("Initializing Mistral OCR...")
+        final_result = extract_with_mistral(str(temp_path))
+        log_manager.push("Structuring extracted data...")
+        
+        if final_result.get("error"):
+            # Fallback or Error
+            raise HTTPException(status_code=500, detail=f"Mistral OCR failed: {final_result['error']}")
+
+        # 3. Map to existing schema for frontend compatibility
+        mapped_transactions = []
+        for t in final_result.get("transactions", []):
+            mapped_transactions.append({
+                "merchant": t.get("description", "Unknown"),
+                "amount": round(float(t.get("amount", 0.0)), 2),
+                "date": t.get("date") or date.today().isoformat(),
+                "currency": final_result.get("currency", "INR"),
+                "category": t.get("category_hint") or "Miscellaneous",
+                "description": t.get("description", ""),
+                "confidence": 0.99,
+                "source": "mistral"
+            })
+        
+        response_data = {
+            "transactions": mapped_transactions,
+            "document_type": final_result.get("type", "receipt"),
+            "confidence": 0.99,
+            "file_id": file.filename,
+            "raw_text": final_result.get("raw_text", "")
+        }
+        
+        print(f"✅ [API] OCR & Refinement Complete for {file.filename}")
+        return response_data
+        
+    except HTTPException:
+        raise
     except Exception as e:
-        print(f"❌ [API] OCR Failed: {str(e)}")
+        print(f"❌ [API] Extraction failed: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        # Keep the file in upload_dir if needed for later confirm, 
+        # or delete if it was just a temp path. 
+        # The original code kept it in settings.upload_dir/{file.filename}
+        # Let's mirror the original behavior of keeping a copy if requested.
+        final_file_path = Path(settings.upload_dir) / file.filename
+        if not final_file_path.exists():
+            shutil.copy(temp_path, final_file_path)
+        if temp_path.exists():
+            temp_path.unlink()
 
 @app.post("/api/upload/confirm")
 async def confirm_upload(body: schemas.TransactionList, db: Session = Depends(get_db)):
@@ -133,6 +190,8 @@ def create_goal(goal: schemas.GoalCreate, db: Session = Depends(get_db)):
 # ── ANALYTICS ────────────────────────────────────────────────────────────────
 @app.get("/api/analytics/summary")
 def api_summary(period: str = "this_month", db: Session = Depends(get_db)):
+    from logs import log_manager
+    log_manager.push(f"Refreshing {period.replace('_', ' ')} summary...")
     return spending_summary(db, period)
 
 @app.get("/api/analytics/trend")
@@ -162,7 +221,19 @@ def get_subs(db: Session = Depends(get_db)):
 
 @app.post("/api/subscriptions/detect")
 def api_detect_subs(db: Session = Depends(get_db)):
+    log_manager.push("Scanning transactions for patterns...")
     return detect_recurring(db)
+
+@app.post("/api/subscriptions")
+def create_sub(sub: schemas.RecurringExpenseCreate, db: Session = Depends(get_db)):
+    db_sub = models.RecurringExpense(**sub.model_dump())
+    if not db_sub.next_expected:
+        # Default next expected to 1 month from now if not set
+        db_sub.next_expected = date.today() + timedelta(days=30)
+    db.add(db_sub)
+    db.commit()
+    db.refresh(db_sub)
+    return db_sub
 
 # ── CHAT ──────────────────────────────────────────────────────────────────────
 @app.post("/api/chat")
@@ -175,7 +246,9 @@ def chat_endpoint(body: schemas.ChatRequest, db: Session = Depends(get_db)):
     db.add(user_msg)
     db.commit()
     
-    response = agent.chat(body.message, history_list, db)
+    # Use the new Official LangGraph ProductionAgent
+    agent_executor = ProductionAgent(db)
+    response = agent_executor.execute(body.message, history_list)
     
     # Save assistant message
     assistant_msg = models.ChatMessage(role="assistant", content=response)

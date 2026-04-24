@@ -6,16 +6,13 @@ from collections import defaultdict
 import statistics
 
 CATEGORIES = {
-    "Food & Dining": ["swiggy", "zomato", "uber eats", "restaurant", "cafe", "biryani", "pizza", "burger", "dominos", "kfc", "mcdonalds", "starbucks"],
+    "Food": ["swiggy", "zomato", "uber eats", "restaurant", "cafe", "biryani", "pizza", "burger", "dominos", "kfc", "mcdonalds", "starbucks"],
     "Transport": ["uber", "ola", "rapido", "irctc", "metro", "petrol", "fuel", "auto", "bus", "flight", "indigo", "air india"],
     "Utilities": ["electricity", "bescom", "tneb", "water", "gas", "internet", "broadband", "airtel", "jio"],
     "Shopping": ["amazon", "flipkart", "myntra", "ajio", "zepto", "blinkit", "instamart", "meesho", "nykaa"],
     "Entertainment": ["netflix", "hotstar", "spotify", "youtube", "prime video", "cinema", "pvr", "inox", "bookmyshow"],
     "Healthcare": ["pharmacy", "hospital", "clinic", "apollo", "medplus", "diagnostic", "lab", "doctor", "medicine"],
     "Education": ["udemy", "coursera", "book", "course", "training", "school", "college", "byju"],
-    "Subscriptions": ["subscription", "renewal", "monthly plan", "annual plan", "premium"],
-    "Travel": ["oyo", "makemytrip", "goibibo", "booking.com", "airbnb"],
-    "Groceries": ["bigbasket", "dmart", "reliance fresh", "more supermarket", "vegetables", "supermarket"],
 }
 
 def categorise(merchant: str, description: str = "") -> tuple:
@@ -45,12 +42,25 @@ def get_period_dates(period: str) -> tuple:
     return today.replace(day=1), today
 
 def spending_summary(db: Session, period: str = "this_month") -> dict:
-    start, end = get_period_dates(period)
-    txns = db.query(Transaction).filter(
-        Transaction.deleted == False,
-        Transaction.date >= start,
-        Transaction.date <= end
-    ).all()
+    if period == "latest":
+        last_txn = db.query(Transaction).filter(Transaction.deleted == False).order_by(Transaction.created_at.desc()).first()
+        if not last_txn:
+            return {"period": "latest", "total": 0, "transaction_count": 0, "msg": "No transactions found."}
+        
+        # Capture all transactions within 10 seconds of the latest entry (the burst)
+        burst_start = last_txn.created_at - timedelta(seconds=10)
+        txns = db.query(Transaction).filter(
+            Transaction.deleted == False,
+            Transaction.created_at >= burst_start
+        ).all()
+        start = end = last_txn.created_at.date()
+    else:
+        start, end = get_period_dates(period)
+        txns = db.query(Transaction).filter(
+            Transaction.deleted == False,
+            Transaction.date >= start,
+            Transaction.date <= end
+        ).all()
     by_category = defaultdict(float)
     by_merchant = defaultdict(float)
     for t in txns:
@@ -60,9 +70,10 @@ def spending_summary(db: Session, period: str = "this_month") -> dict:
     return {
         "period": period, "start": str(start), "end": str(end),
         "total": round(sum(by_category.values()), 2),
+        "currency": "INR (₹)",
         "transaction_count": len(txns),
         "by_category": {k: round(v, 2) for k, v in sorted(by_category.items(), key=lambda x: x[1], reverse=True)},
-        "top_merchants": [{"merchant": m, "amount": round(a, 2)} for m, a in top_merchants],
+        "top_merchants": [{"merchant": m, "amount": round(a, 2), "currency": "INR (₹)"} for m, a in top_merchants],
     }
 
 def monthly_trend(db: Session, months: int = 6) -> list:
@@ -170,7 +181,7 @@ def _avg_monthly_spend(db: Session) -> float:
         Transaction.date >= three_months_ago,
         Transaction.is_recurring == False
     ).all()
-    return sum(t.amount for t in txns) / 3 if txns else 5000.0
+    return sum(t.amount for t in txns) / 3 if txns else 0.0
 
 def detect_recurring(db: Session) -> list:
     six_months_ago = date.today() - relativedelta(months=6)
