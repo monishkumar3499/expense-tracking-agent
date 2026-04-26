@@ -20,18 +20,14 @@ class Transaction(Base):
     description = Column(Text, default="")
     raw_text = Column(Text, default="")
     file_id = Column(String, default="")
+    bill_name = Column(String, default="")  # Summarized name for the whole receipt
+    bill_total = Column(Float, default=0.0)  # Total amount for the whole receipt
     is_recurring = Column(Boolean, default=False)
     tax_deductible = Column(Boolean, default=False)
     tax_section = Column(String, default="")
     deleted = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
-class Budget(Base):
-    __tablename__ = "budgets"
-    id = Column(String, primary_key=True, default=gen_id)
-    category = Column(String, nullable=False, unique=True)
-    monthly_limit = Column(Float, nullable=False)
-    alert_threshold = Column(Float, default=0.8)
 
 class Goal(Base):
     __tablename__ = "goals"
@@ -60,4 +56,16 @@ class ChatMessage(Base):
     id = Column(String, primary_key=True, default=gen_id)
     role = Column(String, nullable=False)   # user | assistant
     content = Column(Text, nullable=False)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class FinancialGoal(Base):
+    __tablename__ = "financial_goals"
+    id = Column(String, primary_key=True, default=gen_id)
+    timeline = Column(String, nullable=False)   # 1_month | 6_months | 1_year
+    total_budget = Column(Float, nullable=False)
+    category_budgets = Column(JSON, default=dict)   # {"Food": 1000, ...}
+    start_date = Column(Date, nullable=False)
+    end_date = Column(Date, nullable=False)
+    status = Column(String, default="active") # active | deleted
     created_at = Column(DateTime, default=datetime.utcnow)

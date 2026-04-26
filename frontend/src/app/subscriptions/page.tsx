@@ -2,10 +2,11 @@
 
 import { useState, useEffect } from 'react'
 import api from '@/lib/api'
-import { RefreshCw, Search, Calendar, ChevronRight, CreditCard, Sparkles } from 'lucide-react'
+import { RefreshCw, Search, Calendar, ChevronRight, CreditCard, Sparkles, Edit2, Trash2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { format } from 'date-fns'
 import StatusBadge from '@/components/StatusBadge'
+import ConfirmModal from '@/components/ConfirmModal'
 
 export default function SubscriptionsPage() {
     const [subs, setSubs] = useState<any[]>([])
@@ -13,6 +14,8 @@ export default function SubscriptionsPage() {
     const [isDetecting, setIsDetecting] = useState(false)
 
     const [isModalOpen, setIsModalOpen] = useState(false)
+    const [editingSubId, setEditingSubId] = useState<number | null>(null)
+    const [confirmDelete, setConfirmDelete] = useState<{ isOpen: boolean, id: any }>({ isOpen: false, id: null })
     const [newSub, setNewSub] = useState({
         merchant: '',
         avg_amount: '',
@@ -35,16 +38,48 @@ export default function SubscriptionsPage() {
     const handleAddSub = async (e: React.FormEvent) => {
         e.preventDefault()
         try {
-            await api.post('/api/subscriptions', {
-                ...newSub,
-                avg_amount: parseFloat(newSub.avg_amount)
-            })
-            toast.success("Recurring cost added")
+            if (editingSubId) {
+                await api.put(`/api/subscriptions/${editingSubId}`, {
+                    ...newSub,
+                    avg_amount: parseFloat(newSub.avg_amount)
+                })
+                toast.success("Recurring cost updated")
+            } else {
+                await api.post('/api/subscriptions', {
+                    ...newSub,
+                    avg_amount: parseFloat(newSub.avg_amount)
+                })
+                toast.success("Recurring cost added")
+            }
             setIsModalOpen(false)
+            setEditingSubId(null)
             setNewSub({ merchant: '', avg_amount: '', category: 'Miscellaneous', frequency: 'monthly' })
             fetchSubs()
         } catch (err) {
-            toast.error("Failed to add recurring cost")
+            toast.error("Operation failed")
+        }
+    }
+
+    const handleEditClick = (s: any) => {
+        setEditingSubId(s.id)
+        setNewSub({
+            merchant: s.merchant,
+            avg_amount: s.avg_amount.toString(),
+            category: s.category,
+            frequency: s.frequency
+        })
+        setIsModalOpen(true)
+    }
+
+    const handleDeleteSub = async (id: any) => {
+        const loadingToast = toast.loading("Removing commitment...")
+        try {
+            await api.delete(`/api/subscriptions/${id}`)
+            toast.success("Removed commitment", { id: loadingToast })
+            setConfirmDelete({ isOpen: false, id: null })
+            fetchSubs()
+        } catch (err) {
+            toast.error("Failed to remove", { id: loadingToast })
         }
     }
 
@@ -53,7 +88,7 @@ export default function SubscriptionsPage() {
         const load = toast.loading("Analyzing transaction patterns...")
         try {
             const res = await api.post('/api/subscriptions/detect')
-            toast.success(`Found ${res.data.new} new recurring expenses!`, { id: load })
+            toast.success("Detection complete", { id: load })
             fetchSubs()
         } catch (err) {
             toast.error("Detection failed", { id: load })
@@ -76,6 +111,16 @@ export default function SubscriptionsPage() {
 
     return (
         <div className="p-8 md:p-12 w-full space-y-12 min-h-screen bg-white">
+            <ConfirmModal 
+                isOpen={confirmDelete.isOpen}
+                title="Remove Recurring Cost?"
+                message="This will stop Finn from tracking this service in your commitments. You can always re-detect it later."
+                confirmText="Remove Commitment"
+                variant="danger"
+                onConfirm={() => handleDeleteSub(confirmDelete.id)}
+                onCancel={() => setConfirmDelete({ isOpen: false, id: null })}
+            />
+            
             <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
                 <div className="space-y-1">
                     <h1 className="text-4xl font-bold tracking-tight text-[#171717]">Recurring Costs</h1>
@@ -92,7 +137,11 @@ export default function SubscriptionsPage() {
                             <RefreshCw size={18} className={isDetecting ? 'animate-spin' : ''} /> Detect Patterns
                         </button>
                         <button 
-                            onClick={() => setIsModalOpen(true)}
+                            onClick={() => {
+                                setEditingSubId(null)
+                                setNewSub({ merchant: '', avg_amount: '', category: 'Miscellaneous', frequency: 'monthly' })
+                                setIsModalOpen(true)
+                            }}
                             className="flex items-center gap-2 px-6 py-3 bg-[#171717] text-white rounded-2xl text-sm font-bold shadow-xl shadow-black/10 hover:opacity-90 transition-all"
                         >
                             New Fixed Cost
@@ -106,7 +155,7 @@ export default function SubscriptionsPage() {
                 <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
                     <div className="bg-white rounded-[2.5rem] w-full max-w-lg p-10 shadow-2xl animate-in fade-in zoom-in duration-300">
                         <div className="flex justify-between items-center mb-8">
-                            <h3 className="text-2xl font-bold text-[#171717]">Add Fixed Cost</h3>
+                            <h3 className="text-2xl font-bold text-[#171717]">{editingSubId ? 'Edit Fixed Cost' : 'Add Fixed Cost'}</h3>
                             <button onClick={() => setIsModalOpen(false)} className="text-[#a3a3a3] hover:text-[#171717]">✕</button>
                         </div>
                         <form onSubmit={handleAddSub} className="space-y-6">
@@ -243,8 +292,19 @@ export default function SubscriptionsPage() {
                                 <Calendar size={16} className="text-[#d4d4d4]" />
                                 Next: {format(new Date(s.next_expected), 'MMM dd')}
                             </div>
-                            <div className="w-10 h-10 rounded-full bg-[#f5f5f5] flex items-center justify-center text-[#d4d4d4] group-hover:bg-[#cc9966] group-hover:text-white transition-all transform group-hover:scale-110">
-                                <ChevronRight size={18} />
+                            <div className="flex items-center gap-2">
+                                <button 
+                                    onClick={() => handleEditClick(s)}
+                                    className="p-2 text-[#d4d4d4] hover:text-[#171717] hover:bg-[#f5f5f5] rounded-xl transition-all"
+                                >
+                                    <Edit2 size={16} />
+                                </button>
+                                <button 
+                                    onClick={() => setConfirmDelete({ isOpen: true, id: s.id })}
+                                    className="p-2 text-[#d4d4d4] hover:text-[#ef4444] hover:bg-red-50 rounded-xl transition-all"
+                                >
+                                    <Trash2 size={16} />
+                                </button>
                             </div>
                         </div>
                     </div>

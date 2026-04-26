@@ -1,0 +1,147 @@
+================================================================================
+FINN: ADVANCED AGENTIC FINANCIAL INTELLIGENCE - SYSTEM RESEARCH & ARCHITECTURE
+================================================================================
+
+1. ABSTRACT
+-----------
+Finn is a research-oriented implementation of an Autonomous Financial Agent.
+It addresses the core challenges of personal finance: data entry friction, 
+lack of actionable insights, and privacy concerns. By leveraging a 
+Multi-Model Agentic Architecture, Finn transforms raw transactional data 
+into a living "Financial Knowledge Graph." This document details the 
+underlying algorithms, the agentic state machine, and the decoupled tool 
+architecture that powers the system.
+
+2. CHAPTER I: AGENTIC THEORY & ORCHESTRATION (LANGGRAPH)
+--------------------------------------------------------
+Finn's brain is not a linear pipeline but a directed acyclic graph (DAG) 
+orchestrated by LangGraph. This design acknowledges that financial questions 
+are often iterative and multi-dimensional.
+
+A. THE STATEFUL REASONING LOOP:
+   - THE STATE OBJECT: The agent maintains a `GraphState` that tracks the 
+     conversation history, the current tool outputs, and the "Confidence Score" 
+     of the AI's reasoning.
+   - CONDITIONAL EDGES: The graph uses conditional logic to decide its next 
+     step. If the LLM generates a response without a tool call, the graph 
+     terminates. If it generates a tool call, the graph routes to the 
+     `action` node.
+   - FEEDBACK LOOPS: The architecture allows the agent to "self-correct." If a 
+     tool returns an error or empty data, the LLM can re-reason and try a 
+     different tool (e.g., searching for a merchant instead of a category).
+
+B. THE LLM AS A COMPILER:
+   In Finn, the LLM (Ollama/Gemma-2) acts as a JIT (Just-In-Time) compiler that 
+   translates Natural Language Intent into Structured Tool Parameters. This 
+   abstraction allows the user to speak naturally while the system operates 
+   with mathematical precision.
+
+C. HALLUCINATION MITIGATION (THE GROUNDING PROBLEM):
+   A critical research focus of Finn is "Numerical Grounding." By isolating 
+   the LLM from the raw database and forcing it to use tools, we create a 
+   "Sandbox of Truth." The LLM cannot invent spending figures because it 
+   never writes SQL; it only consumes the validated JSON output of the 
+   Python-based finance tools.
+
+3. CHAPTER II: THE MCP TOOL REGISTRY & MATHEMATICAL MODELS
+----------------------------------------------------------
+Finn uses a Model Context Protocol (MCP) inspired architecture. Each tool 
+is documented below with its underlying logic, formulas, and research purpose.
+
+[TOOL 1] spending_summary:
+   - LOGIC: Performs multi-period aggregation. It calculates the "MoM Delta" 
+     (Month-on-Month change) using the formula: `((Current - Previous) / Previous) * 100`.
+   - MATHEMATICS: Uses aggregate summation over temporal windows.
+   - PURPOSE: Provides the LLM with a relative sense of spending velocity.
+
+[TOOL 2] monthly_trend:
+   - LOGIC: Aggregates data into monthly buckets for up to 24 months.
+   - ANALYSIS: Implements a "Split-Mean Trend" estimation by comparing the 
+     average of the first half of the dataset to the second half.
+   - PURPOSE: Identifies long-term lifestyle inflation or structural 
+     spending changes.
+
+[TOOL 3] budget_status (The Health Score):
+   - ALGORITHM: `Score = 100 - max(0, (Spent / Budget) - (DaysElapsed / TotalDays)) * 100`.
+   - THEORY: Measures "Fiscal Burn Rate." A score of 100 indicates perfect 
+     linear spending. A score below 60 signals a "High Probability of Budget 
+     Exhaustion" before the end of the timeline.
+
+[TOOL 4] detect_anomalies:
+   - ALGORITHM: Z-Score Statistical Detection. `Z = (x - μ) / σ`.
+   - MATHEMATICS: Calculates the Arithmetic Mean (μ) and Standard Deviation (σ) 
+     for each category over a 90-day rolling window. 
+   - THRESHOLD: Transactions with a Z-score > 2.5 (representing a ~1% 
+     probability event) are flagged.
+
+[TOOL 5] cash_flow_forecast:
+   - LOGIC: `Forecast = (Known Recurring Bills) + (Avg Daily Variable Spend * Remaining Days)`.
+   - ANALYSIS: Separates "Fixed Outflow" (Subscriptions) from "Variable Outflow" 
+     (Grocery/Shopping) to create a high-confidence projection.
+
+[TOOL 6] detect_recurring:
+   - ALGORITHM: Temporal Pattern Matching.
+   - LOGIC: Scans historical data for merchant/amount pairs that recur with 
+     a frequency variance of < 10% and a date variance of ±3 days.
+
+[TOOL 7] category_breakdown:
+   - LOGIC: Deep-dive analysis into a single vertical. It identifies "Category 
+     Saturation" by finding the top 3 merchants responsible for the most spend.
+
+[TOOL 8] merchant_insights:
+   - ANALYSIS: Calculates "Visit Frequency" vs. "Ticket Size." 
+   - PURPOSE: Distinguishes between "Frequency Merchants" (e.g., Starbucks) and 
+     "Value Merchants" (e.g., Apple Store).
+
+[TOOL 9] daily_spending_pattern:
+   - LOGIC: Groups transactions by Day-of-Week to find behavioral cycles.
+   - DISCOVERY: Often identifies "Weekend Spikes" or "Payday Splurges."
+
+[TOOL 10] tax_summary:
+   - LOGIC: Groups transactions based on Indian Financial Year (April-March) 
+     and specific Section 80C/80D tags.
+
+4. CHAPTER III: VISION-LANGUAGE PIPELINE (OCR)
+----------------------------------------------
+The "Receipt-to-Data" problem is solved via a two-stage asynchronous pipeline:
+
+A. STAGE 1: SPATIAL SEMANTIC EXTRACTION (MISTRAL OCR):
+   Utilizes a Vision-Encoder-Decoder model to parse the spatial hierarchy of 
+   documents. This stage handles multi-language support and "Table 
+   Reconstruction," which is vital for parsing line-items in complex bills.
+
+B. STAGE 2: NER & SCHEMA MAPPING (OLLAMA):
+   The raw markdown text is piped into a local LLM with a Zero-Shot 
+   NER (Named Entity Recognition) prompt. The LLM identifies:
+   - Merchants (Entities)
+   - Totals (Numerals)
+   - Dates (Temporals)
+   - Category Hints (Semantic Classifiers)
+
+5. CHAPTER IV: BACKEND DESIGN & DATA SOVEREIGNTY
+------------------------------------------------
+A. ASYNCHRONOUS FASTAPI:
+   The backend uses a "Concurrency-First" approach. Long-running AI tasks 
+   are handled via `asyncio.to_thread` to keep the event loop responsive 
+   for real-time logging and UI interactions.
+
+B. SQLITE WAL-MODE & CONCURRENCY:
+   Write-Ahead Logging (WAL) is enabled to allow "Simultaneous Access." This 
+   prevents the frontend charts from freezing while the AI is writing hundreds 
+   of transactions to the database.
+
+6. CHAPTER V: THE MEMORY SUBSYSTEM
+----------------------------------
+Finn implements a "Short-Term Memory" using a `chat_messages` table. 
+- CONTEXT WINDOW: The agent is provided with the last 15 messages to 
+  maintain conversational flow.
+- STATEFUL PERSISTENCE: Unlike most RAG systems, Finn's memory is 
+  integrated into the relational database, allowing for cross-session 
+  continuity.
+
+7. CONCLUSION & FUTURE RESEARCH
+-------------------------------
+Finn moves personal finance from "Data Entry" to "Data Interpretation." 
+Future research iterations will focus on "Predictive Goal Setting" 
+and "Automated Tax Optimization" using the same agentic principles 
+documented here.

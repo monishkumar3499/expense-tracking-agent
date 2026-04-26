@@ -17,13 +17,6 @@ def get_db():
         db.close()
 
 def init_db():
-    from models import Transaction, Budget, Goal, RecurringExpense, ChatMessage
+    from models import Transaction, Goal, RecurringExpense, ChatMessage, FinancialGoal
     Base.metadata.create_all(bind=engine)
-    
-    # Clear chat history on startup for session-based experience
-    db = SessionLocal()
-    try:
-        db.query(ChatMessage).delete()
-        db.commit()
-    finally:
-        db.close()
+    print("🗄️ [DB] Database schema verified.")

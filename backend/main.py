@@ -1,22 +1,54 @@
 from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+import sys
 from sqlalchemy.orm import Session
-from sqlalchemy import desc, func
+from sqlalchemy import desc, func, or_
 from database import SessionLocal, engine, init_db
 from config import settings
 import models, schemas
 from pathlib import Path
-import json, uuid, shutil
+import json, uuid, shutil, asyncio
 from datetime import datetime, date, timedelta
 from finance_tools import (spending_summary, monthly_trend, budget_status,
-                   detect_anomalies, cash_flow_forecast, detect_recurring, goal_progress, tax_summary, categorise)
+                   detect_anomalies, cash_flow_forecast, detect_recurring, goal_progress, categorise)
 from graph import ProductionAgent
-import agent # Keep for legacy compatibility during transition if needed
-from typing import List, Optional, AsyncGenerator
-import asyncio
-from logs import log_manager
-
+from typing import List, Optional, Union
 from contextlib import asynccontextmanager
+
+# --- WINDOWS ENCODING FIX ---
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8')
+    except AttributeError:
+        pass
+
+# --- MINIMAL LOG MANAGER (Internal) ---
+class LogManager:
+    def __init__(self):
+        self.listeners: List[asyncio.Queue] = []
+
+    async def subscribe(self):
+        queue = asyncio.Queue()
+        self.listeners.append(queue)
+        try:
+            while True:
+                msg = await asyncio.wait_for(queue.get(), timeout=20.0)
+                if msg is None: break
+                yield f"data: {msg}\n\n"
+        except asyncio.TimeoutError:
+            yield ": heartbeat\n\n"
+        finally:
+            if queue in self.listeners: self.listeners.remove(queue)
+
+    def push(self, msg: str):
+        for q in self.listeners: q.put_nowait(msg)
+
+    def stop(self):
+        for q in self.listeners: q.put_nowait(None)
+        self.listeners.clear()
+
+log_manager = LogManager()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -25,6 +57,7 @@ async def lifespan(app: FastAPI):
     print("✅ [STARTUP] Database ready.")
     yield
     print("🛑 [SHUTDOWN] Closing connections...")
+    log_manager.stop()
 
 app = FastAPI(title="Expense Tracker Agent", lifespan=lifespan)
 app.add_middleware(CORSMiddleware,
@@ -50,7 +83,7 @@ def get_db():
 @app.post("/api/upload")
 @app.post("/api/extract")
 async def upload_and_extract(file: UploadFile = File(...)):
-    log_manager.push(f"Received file: {file.filename}")
+    print(f"📡 [LOG] Received file: {file.filename}")
     
     # Save file to temp location for processing
     suffix = Path(file.filename or "upload").suffix or ".jpg"
@@ -62,9 +95,9 @@ async def upload_and_extract(file: UploadFile = File(...)):
         
         # Process with Mistral OCR Pipeline
         from mistral_pipeline import extract_with_mistral
-        log_manager.push("Initializing Mistral OCR...")
-        final_result = extract_with_mistral(str(temp_path))
-        log_manager.push("Structuring extracted data...")
+        print("📡 [LOG] Initializing Mistral OCR...")
+        final_result = await asyncio.to_thread(extract_with_mistral, str(temp_path))
+        print("📡 [LOG] Structuring extracted data...")
         
         if final_result.get("error"):
             # Fallback or Error
@@ -87,6 +120,8 @@ async def upload_and_extract(file: UploadFile = File(...)):
         response_data = {
             "transactions": mapped_transactions,
             "document_type": final_result.get("type", "receipt"),
+            "bill_name": final_result.get("bill_name", file.filename),
+            "bill_total": final_result.get("total", 0.0),
             "confidence": 0.99,
             "file_id": file.filename,
             "raw_text": final_result.get("raw_text", "")
@@ -127,15 +162,81 @@ def get_transactions(
     page: int = 1, limit: int = 15, search: str = "", category: str = "",
     db: Session = Depends(get_db)
 ):
+    # We want to group by file_id (receipts)
+    # But for manual ones (no file_id), we want them separate.
+    # We'll use a subquery or just group in Python for simplicity since limit is small.
+    # However, pagination on GROUPS is tricky in raw SQL.
+    # Let's try to fetch all active transactions and group them.
+    
     query = db.query(models.Transaction).filter(models.Transaction.deleted == False)
     if search:
-        query = query.filter(models.Transaction.merchant.ilike(f"%{search}%"))
-    if category:
-        query = query.filter(models.Transaction.category == category)
+        query = query.filter(
+            or_(
+                models.Transaction.merchant.ilike(f"%{search}%"),
+                models.Transaction.bill_name.ilike(f"%{search}%"),
+                models.Transaction.category.ilike(f"%{search}%")
+            )
+        )
     
-    total = query.count()
-    txns = query.order_by(desc(models.Transaction.date)).offset((page-1)*limit).limit(limit).all()
-    return {"transactions": txns, "total": total}
+    all_txns = query.order_by(desc(models.Transaction.date), desc(models.Transaction.created_at)).all()
+    
+    bills = []
+    seen_files = {} # file_id -> bill object
+    
+    for t in all_txns:
+        if t.file_id:
+            if t.file_id not in seen_files:
+                bill = {
+                    "id": t.file_id,
+                    "name": t.bill_name or t.merchant,
+                    "date": t.date,
+                    "total": t.bill_total or t.amount,
+                    "items": [],
+                    "is_receipt": True
+                }
+                seen_files[t.file_id] = bill
+                bills.append(bill)
+            seen_files[t.file_id]["items"].append(t)
+            # Ensure total is correct if bill_total was missing
+            if not t.bill_total:
+                 seen_files[t.file_id]["total"] = sum(item.amount for item in seen_files[t.file_id]["items"])
+        else:
+            # Manual transaction, treat as a single-item bill
+            bills.append({
+                "id": t.id,
+                "name": t.merchant,
+                "date": t.date,
+                "total": t.amount,
+                "items": [t],
+                "is_receipt": False
+            })
+    
+    # Paginate groups
+    start_idx = (page - 1) * limit
+    end_idx = start_idx + limit
+    
+    return {
+        "bills": bills[start_idx:end_idx],
+        "total_pages": (len(bills) + limit - 1) // limit,
+        "current_page": page
+    }
+
+@app.delete("/api/transactions/bill/{bill_id}")
+def delete_bill(bill_id: str, db: Session = Depends(get_db)):
+    print(f"🗑️ [API] Deleting bill: {bill_id}")
+    # Try as file_id
+    txns = db.query(models.Transaction).filter(models.Transaction.file_id == bill_id).all()
+    if txns:
+        for t in txns:
+            t.deleted = True
+    else:
+        # Try as individual ID
+        t = db.query(models.Transaction).filter(models.Transaction.id == bill_id).first()
+        if t:
+            t.deleted = True
+            
+    db.commit()
+    return {"status": "success"}
 
 @app.post("/api/transactions")
 def create_transaction(txn: schemas.TransactionCreate, db: Session = Depends(get_db)):
@@ -161,26 +262,52 @@ def delete_transaction(id: str, db: Session = Depends(get_db)):
     db.commit()
     return {"status": "success"}
 
-# ── BUDGETS ──────────────────────────────────────────────────────────────────
-@app.post("/api/budgets")
-def create_budget(budget: schemas.BudgetCreate, db: Session = Depends(get_db)):
-    db_budget = models.Budget(**budget.model_dump())
-    db.add(db_budget)
-    db.commit()
-    db.refresh(db_budget)
-    return db_budget
+# ── FINANCIAL GOALS (DASHBOARD) ──────────────────────────────────────────────
 
-@app.delete("/api/budgets/{id}")
-def delete_budget(id: str, db: Session = Depends(get_db)):
-    db_b = db.query(models.Budget).filter(models.Budget.id == id).first()
-    if db_b:
-        db.delete(db_b)
-        db.commit()
+@app.get("/api/financial-goals", response_model=List[schemas.FinancialGoalDetail])
+async def list_financial_goals(db: Session = Depends(get_db)):
+    """Unified endpoint for budget tracking using central finance tools."""
+    data = budget_status(db)
+    # The frontend expects a list directly
+    return data["goals"]
+
+@app.put("/api/financial-goals/{goal_id}")
+async def update_financial_goal(goal_id: str, goal: schemas.FinancialGoalCreate, db: Session = Depends(get_db)):
+    db_goal = db.query(models.FinancialGoal).filter(models.FinancialGoal.id == goal_id).first()
+    if not db_goal:
+        raise HTTPException(status_code=404, detail="Goal not found")
+    
+    for key, value in goal.model_dump().items():
+        setattr(db_goal, key, value)
+    
+    db.commit()
     return {"status": "success"}
 
-# ── GOALS ────────────────────────────────────────────────────────────────────
+@app.delete("/api/financial-goals/{goal_id}")
+async def delete_financial_goal(goal_id: str, db: Session = Depends(get_db)):
+    db_goal = db.query(models.FinancialGoal).filter(models.FinancialGoal.id == goal_id).first()
+    if not db_goal:
+        raise HTTPException(status_code=404, detail="Goal not found")
+    
+    db_goal.status = "deleted"
+    db.commit()
+    return {"status": "success"}
+
+@app.post("/api/financial-goals", response_model=schemas.FinancialGoal)
+async def create_financial_goal(goal: schemas.FinancialGoalCreate, db: Session = Depends(get_db)):
+    db_goal = models.FinancialGoal(**goal.model_dump())
+    db.add(db_goal)
+    db.commit()
+    db.refresh(db_goal)
+    return db_goal
+
+# ── SAVINGS GOALS ────────────────────────────────────────────────────────────
+@app.get("/api/goals")
+def list_savings_goals(db: Session = Depends(get_db)):
+    return db.query(models.Goal).filter(models.Goal.status != "deleted").all()
+
 @app.post("/api/goals")
-def create_goal(goal: schemas.GoalCreate, db: Session = Depends(get_db)):
+def create_savings_goal(goal: schemas.GoalCreate, db: Session = Depends(get_db)):
     db_goal = models.Goal(**goal.model_dump())
     db.add(db_goal)
     db.commit()
@@ -190,12 +317,10 @@ def create_goal(goal: schemas.GoalCreate, db: Session = Depends(get_db)):
 # ── ANALYTICS ────────────────────────────────────────────────────────────────
 @app.get("/api/analytics/summary")
 def api_summary(period: str = "this_month", db: Session = Depends(get_db)):
-    from logs import log_manager
-    log_manager.push(f"Refreshing {period.replace('_', ' ')} summary...")
     return spending_summary(db, period)
 
 @app.get("/api/analytics/trend")
-def api_trend(months: int = 6, db: Session = Depends(get_db)):
+def api_trend(months: Union[int, str] = 6, db: Session = Depends(get_db)):
     return monthly_trend(db, months)
 
 @app.get("/api/analytics/budgets")
@@ -210,10 +335,6 @@ def api_anomalies(db: Session = Depends(get_db)):
 def api_forecast(days: int = 30, db: Session = Depends(get_db)):
     return cash_flow_forecast(db, days)
 
-@app.get("/api/analytics/goals")
-def api_goals(db: Session = Depends(get_db)):
-    return goal_progress(db)
-
 # ── SUBSCRIPTIONS ────────────────────────────────────────────────────────────
 @app.get("/api/subscriptions")
 def get_subs(db: Session = Depends(get_db)):
@@ -221,7 +342,7 @@ def get_subs(db: Session = Depends(get_db)):
 
 @app.post("/api/subscriptions/detect")
 def api_detect_subs(db: Session = Depends(get_db)):
-    log_manager.push("Scanning transactions for patterns...")
+    print("📡 [LOG] Scanning transactions for patterns...")
     return detect_recurring(db)
 
 @app.post("/api/subscriptions")
@@ -235,9 +356,31 @@ def create_sub(sub: schemas.RecurringExpenseCreate, db: Session = Depends(get_db
     db.refresh(db_sub)
     return db_sub
 
+@app.put("/api/subscriptions/{sub_id}")
+def update_sub(sub_id: str, sub: schemas.RecurringExpenseCreate, db: Session = Depends(get_db)):
+    db_sub = db.query(models.RecurringExpense).filter(models.RecurringExpense.id == sub_id).first()
+    if not db_sub:
+        raise HTTPException(status_code=404, detail="Subscription not found")
+    
+    for key, value in sub.model_dump().items():
+        setattr(db_sub, key, value)
+    
+    db.commit()
+    return {"status": "success"}
+
+@app.delete("/api/subscriptions/{sub_id}")
+def delete_sub(sub_id: str, db: Session = Depends(get_db)):
+    db_sub = db.query(models.RecurringExpense).filter(models.RecurringExpense.id == sub_id).first()
+    if not db_sub:
+        raise HTTPException(status_code=404, detail="Subscription not found")
+    
+    db.delete(db_sub)
+    db.commit()
+    return {"status": "success"}
+
 # ── CHAT ──────────────────────────────────────────────────────────────────────
 @app.post("/api/chat")
-def chat_endpoint(body: schemas.ChatRequest, db: Session = Depends(get_db)):
+async def chat_endpoint(body: schemas.ChatRequest, db: Session = Depends(get_db)):
     history = db.query(models.ChatMessage).order_by(models.ChatMessage.id).all()
     history_list = [{"role": m.role, "content": m.content} for m in history]
     
@@ -246,9 +389,9 @@ def chat_endpoint(body: schemas.ChatRequest, db: Session = Depends(get_db)):
     db.add(user_msg)
     db.commit()
     
-    # Use the new Official LangGraph ProductionAgent
-    agent_executor = ProductionAgent(db)
-    response = agent_executor.execute(body.message, history_list)
+    # Use the new Official LangGraph ProductionAgent with Log Callback
+    agent_executor = ProductionAgent(db, log_callback=log_manager.push)
+    response = await agent_executor.execute(body.message, history_list)
     
     # Save assistant message
     assistant_msg = models.ChatMessage(role="assistant", content=response)
@@ -259,11 +402,13 @@ def chat_endpoint(body: schemas.ChatRequest, db: Session = Depends(get_db)):
 
 @app.get("/api/chat/history")
 def get_chat_history(db: Session = Depends(get_db)):
-    return db.query(models.ChatMessage).order_by(models.ChatMessage.id).all()
+    # Only return active messages for the UI
+    return db.query(models.ChatMessage).filter(models.ChatMessage.is_active == True).order_by(models.ChatMessage.id).all()
 
 @app.delete("/api/chat/history")
 def clear_chat_history(db: Session = Depends(get_db)):
-    db.query(models.ChatMessage).delete()
+    # Deactivate instead of delete
+    db.query(models.ChatMessage).filter(models.ChatMessage.is_active == True).update({"is_active": False})
     db.commit()
     return {"status": "success"}
 

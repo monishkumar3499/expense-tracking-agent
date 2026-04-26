@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     use_local_llm: bool = Field(default=False, alias="USE_LOCAL_LLM")
     
     mistral_api_key: str = Field(default="", alias="MISTRAL_API_KEY")
+    google_api_key: str = Field(default="", alias="GOOGLE_API_KEY")
     
     upload_dir: str = "uploads"
     db_path: str = str(Path(__file__).parent / "expense_tracker.db")
@@ -20,3 +21,14 @@ class Settings(BaseSettings):
         populate_by_name = True
 
 settings = Settings()
+
+# Startup Diagnostic
+if not settings.mistral_api_key:
+    print("⚠️ [CONFIG] Warning: MISTRAL_API_KEY is empty. OCR will fail.")
+else:
+    print(f"✅ [CONFIG] Mistral Key detected: {settings.mistral_api_key[:4]}...{settings.mistral_api_key[-4:]}")
+
+if not settings.google_api_key:
+    print("⚠️ [CONFIG] Warning: GOOGLE_API_KEY is empty.")
+else:
+    print(f"✅ [CONFIG] Google Key detected: {settings.google_api_key[:4]}...{settings.google_api_key[-4:]}")

@@ -23,6 +23,7 @@ const NAV_ITEMS = [
     { label: 'Finn Assistant', icon: MessageSquare, path: '/chat' },
     { label: 'Overview', icon: LayoutDashboard, path: '/dashboard' },
     { label: 'All Transactions', icon: ReceiptText, path: '/transactions' },
+    { label: 'Goals', icon: Target, path: '/goals' },
     { label: 'Recurring', icon: CreditCard, path: '/subscriptions' },
 ]
 

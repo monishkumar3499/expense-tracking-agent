@@ -9,13 +9,12 @@ import {
 import { Wallet, ShoppingCart, Target, AlertTriangle, ArrowUpRight, TrendingUp, PieChart as PieChartIcon } from 'lucide-react'
 import clsx from 'clsx'
 import StatusBadge from '@/components/StatusBadge'
+import toast from 'react-hot-toast'
 
 const COLORS = ['#cc9966', '#a3a3a3', '#d4d4d4', '#e5e5e5', '#f5f5f5']
 
 export default function Dashboard() {
     const [summary, setSummary] = useState<any>(null)
-    const [lastMonthSummary, setLastMonthSummary] = useState<any>(null)
-    const [todaySummary, setTodaySummary] = useState<any>(null)
     const [trend, setTrend] = useState<any[]>([])
     const [forecast, setForecast] = useState<any>(null)
     const [budgets, setBudgets] = useState<any[]>([])
@@ -23,23 +22,21 @@ export default function Dashboard() {
 
     useEffect(() => {
         const fetchData = async () => {
+            setLoading(true)
             try {
-                const [s, sl, st, t, f, b] = await Promise.all([
-                    api.get('/api/analytics/summary', { params: { period: 'this_month' } }),
-                    api.get('/api/analytics/summary', { params: { period: 'last_month' } }),
-                    api.get('/api/analytics/summary', { params: { period: 'today' } }),
-                    api.get('/api/analytics/trend'),
-                    api.get('/api/analytics/forecast'),
+                const [s, t, f, b] = await Promise.all([
+                    api.get('/api/analytics/summary', { params: { period: 'all_time' } }),
+                    api.get('/api/analytics/trend', { params: { months: 'all' } }),
+                    api.get('/api/analytics/forecast', { params: { days: 30 } }),
                     api.get('/api/analytics/budgets'),
                 ])
                 setSummary(s.data)
-                setLastMonthSummary(sl.data)
-                setTodaySummary(st.data)
-                setTrend(t.data)
+                setTrend(t.data.monthly_data || [])
                 setForecast(f.data)
-                setBudgets(b.data)
+                setBudgets(b.data.goals || [])
             } catch (err) {
-                console.error("Failed to fetch dashboard data")
+                console.error("Failed to fetch dashboard data:", err)
+                toast.error("Dashboard partially loaded")
             } finally {
                 setLoading(false)
             }
@@ -49,16 +46,6 @@ export default function Dashboard() {
 
     if (loading) return <div className="p-12 animate-pulse space-y-12"><div className="h-48 bg-[#f5f5f5] rounded-[2rem] w-full"></div><div className="grid grid-cols-2 gap-12"><div className="h-96 bg-[#f5f5f5] rounded-[2rem]"></div><div className="h-96 bg-[#f5f5f5] rounded-[2rem]"></div></div></div>
 
-    const spendingTrend = (() => {
-        if (!summary || !lastMonthSummary || lastMonthSummary.total === 0) return "Starting point"
-        const diff = ((summary.total - lastMonthSummary.total) / lastMonthSummary.total) * 100
-        return `${diff > 0 ? '+' : ''}${diff.toFixed(1)}% vs last month`
-    })()
-
-    const todayTrend = todaySummary?.transaction_count > 0 
-        ? `${todaySummary.transaction_count} new today` 
-        : "No activity today"
-
     const pieData = summary ? Object.entries(summary.by_category).map(([name, value]) => ({ name, value })) : []
 
     return (
@@ -66,7 +53,7 @@ export default function Dashboard() {
             <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
                 <div className="space-y-2">
                     <h1 className="text-4xl font-bold tracking-tight text-[#171717]">Overview</h1>
-                    <p className="text-[#a3a3a3] font-medium">Real-time financial intelligence.</p>
+                    <p className="text-[#a3a3a3] font-medium">All-time financial intelligence.</p>
                 </div>
                 <div className="flex items-center gap-3 px-4 py-2 bg-[#fdf5eb] rounded-full border border-[#f4e2cc]">
                     <div className="w-2 h-2 rounded-full bg-[#10b981] animate-pulse"></div>
@@ -75,19 +62,29 @@ export default function Dashboard() {
             </header>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-                <KpiCard title="Total Spending" value={`₹${summary?.total.toLocaleString()}`} icon={Wallet} trend={spendingTrend} />
-                <KpiCard title="Total Entries" value={summary?.transaction_count} icon={ShoppingCart} trend={todayTrend} />
                 <KpiCard 
-                    title="Projected Bills" 
-                    value={`₹${forecast?.recurring_outflow?.toLocaleString() ?? '0'}`} 
+                    title="Total Spending" 
+                    value={`₹${summary?.total?.toLocaleString() ?? '0'}`} 
+                    icon={Wallet} 
+                    trend="All-time total" 
+                />
+                <KpiCard 
+                    title="Total Entries" 
+                    value={summary?.transaction_count ?? 0} 
+                    icon={ShoppingCart} 
+                    trend="Lifetime records" 
+                />
+                <KpiCard 
+                    title="Recurrence" 
+                    value={forecast?.active_recurrence_count ?? 0} 
                     icon={AlertTriangle} 
-                    trend={`Next ${forecast?.forecast_days || 30} days`} 
+                    trend="Active subscriptions" 
                 />
                 <KpiCard 
                     title="Budget Health" 
-                    value={budgets.length > 0 ? `${Math.round((budgets.filter(b => !b.over_budget).length / budgets.length) * 100)}%` : 'Active'} 
+                    value={budgets.length > 0 ? `${Math.round((budgets.filter(b => !b.over_budget).length / budgets.length) * 100)}%` : 'Healthy'} 
                     icon={Target} 
-                    trend={budgets.length > 0 ? `${budgets.filter(b => b.over_budget).length} filters hit` : "No limits set"} 
+                    trend={budgets.length > 0 ? `${budgets.filter(b => b.over_budget).length} limits hit` : "Within limits"} 
                 />
             </div>
 
@@ -95,15 +92,6 @@ export default function Dashboard() {
                 <div className="bg-white border border-[#e5e5e5] rounded-[2.5rem] p-8 shadow-sm hover:shadow-xl transition-all duration-500">
                     <div className="flex items-center justify-between mb-8">
                         <h3 className="text-lg font-bold text-[#171717]">Spending Trajectory</h3>
-                        <div className="relative">
-                            <select className="appearance-none bg-[#f5f5f5] border-none rounded-xl px-5 py-2.5 pr-10 text-[10px] font-bold outline-none text-[#171717] hover:bg-[#ebebeb] transition-all cursor-pointer">
-                                <option>Last 6 Months</option>
-                                <option>Last Year</option>
-                            </select>
-                            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[#a3a3a3]">
-                                <ArrowUpRight size={14} className="rotate-45" />
-                            </div>
-                        </div>
                     </div>
                     <div className="h-72">
                         {trend.length === 0 ? (

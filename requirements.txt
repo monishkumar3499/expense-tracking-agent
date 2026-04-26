@@ -4,8 +4,6 @@ python-multipart
 sqlalchemy
 aiosqlite
 google-generativeai
-groq
-pdfplumber
 pillow
 python-dotenv
 pydantic-settings
@@ -14,3 +12,8 @@ python-levenshtein
 aiofiles
 pandas
 python-dateutil
+langgraph
+langchain
+langchain-ollama
+requests
+langchain-google-genai

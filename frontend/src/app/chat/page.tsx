@@ -36,7 +36,15 @@ export default function ChatPage() {
     }
 
     useEffect(() => {
-        // Clear history strictly for session-based request
+        const fetchHistory = async () => {
+            try {
+                const res = await api.get('/api/chat/history')
+                setMessages(res.data)
+            } catch (err) {
+                console.error("Failed to fetch chat history")
+            }
+        }
+        fetchHistory()
     }, [])
 
     useEffect(scrollToBottom, [messages])
@@ -90,7 +98,18 @@ export default function ChatPage() {
                     <span className="text-xs font-bold uppercase tracking-[0.2em] text-[#a3a3a3]">Finn Assistant</span>
                 </div>
                 <div className="flex gap-4">
-                    <button onClick={() => setMessages([])} className="text-[#a3a3a3] hover:text-[#ef4444] p-1.5 rounded-xl transition-all">
+                    <button 
+                        onClick={async () => {
+                            try {
+                                await api.delete('/api/chat/history')
+                                setMessages([])
+                                toast.success("Session ended")
+                            } catch (err) {
+                                toast.error("Could not end session")
+                            }
+                        }} 
+                        className="text-[#a3a3a3] hover:text-[#ef4444] p-1.5 rounded-xl transition-all"
+                    >
                         <Trash2 size={18} />
                     </button>
                 </div>

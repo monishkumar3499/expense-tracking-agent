@@ -1,34 +1,84 @@
-# Finn: AI-Powered Expense Tracking Agent
+# Finn: AI-Powered Financial Intelligence Agent
 
-Finn is a sophisticated personal finance assistant built with a hybrid Local/Remote AI architecture. It offers real-time financial intelligence, automated receipt extraction, and deep spending analysis.
+Finn is a high-fidelity personal finance assistant designed for modern expense tracking. It combines **Local AI** (via Ollama) with **Cloud OCR** (via Mistral) to provide a privacy-conscious yet powerful financial management experience.
 
-## ✨ Features
-- **AI OCR**: Extract transaction data from receipts, statements, and screenshots using local models (`moondream`).
-- **Natural Language Reasoning**: Chat with your finances using local LLMs (`qwen2.5`).
-- **Automated Categorization**: Instant grouping of expenses using smart keyword matching and AI hints.
-- **Visual Analytics**: Interactive dashboards with real-time budget tracking and spending trends.
-- **Privacy First**: Local AI processing ensures your sensitive financial data stays on your hardware.
+## 🚀 Key Features
 
-## 🛠️ Tech Stack
-- **Frontend**: Next.js 16, Tailwind CSS (Claude-inspired Light Theme).
-- **Backend**: FastAPI, SQLAlchemy, SQLite.
-- **Intelligence**: Ollama (qwen2.5, moondream), Gemini (Fallback).
+- **Hybrid OCR Pipeline**: High-accuracy receipt extraction using Mistral OCR (supports PDFs and Images) paired with local Ollama structuring.
+- **Dynamic Budgeting**: Multi-timeline budget goals (Monthly, 6-Month, Yearly) with real-time health scoring and category-specific tracking.
+- **Commitment Tracking**: Automated detection of recurring subscriptions and upcoming financial commitments.
+- **Universal Search**: Unified keyword search across all transaction history (Ledger).
+- **Interactive Analytics**: Premium Dashboard featuring spending trajectory charts, category distribution, and cash flow forecasts.
+- **AI Chat Interface**: Narrated financial insights using a LangGraph-powered production agent.
 
-## 🚀 Getting Started
+## 🛠️ Technical Architecture
 
-### Prerequisites
-- Node.js 18+
-- Python 3.12+
-- [Ollama](https://ollama.com/) (Pulled `qwen2.5:1.5b` and `moondream`)
+### Backend (FastAPI + SQLAlchemy)
+- **Engine**: FastAPI for high-performance asynchronous API endpoints.
+- **Database**: SQLite with a multi-model schema (Transactions, Goals, Subscriptions, Chat History).
+- **Intelligence**: 
+  - **Mistral OCR**: Cloud-based extraction for high-fidelity receipt parsing.
+  - **Ollama (Gemma-2-9b)**: Local structuring and reasoning for privacy and speed.
+  - **LangGraph**: Orchestrates complex financial tool-calling for the chat agent.
 
-### Setup
-1. Clone the repository and navigate to the root.
-2. Install dependencies:
-   - Backend: `pip install -r backend/requirements.txt`
-   - Frontend: `npm install`
-3. Configure your `.env` with your Gemini API key (optional fallback).
-4. Run the application:
-   - Backend: `cd backend && python main.py`
-   - Frontend: `npm run dev`
+### Frontend (Next.js + Tailwind CSS)
+- **Framework**: Next.js 15 (App Router).
+- **Styling**: Vanilla-flexible CSS with a premium "Glassmorphism" aesthetic.
+- **State Management**: React Hooks + Direct API Integration.
+- **Charts**: Recharts for responsive financial visualization.
 
-Visit `http://localhost:3000` to start tracking!
+## 📦 Setup & Installation
+
+### 1. Prerequisites
+- **Node.js**: v18.0.0 or higher.
+- **Python**: v3.12.0 or higher.
+- **Ollama**: Installed and running locally.
+- **Mistral API Key**: Required for OCR features.
+
+### 2. Environment Configuration
+Create a `.env` file in the root directory:
+```env
+MISTRAL_API_KEY=your_mistral_key_here
+OLLAMA_URL=http://localhost:11434
+MODEL_NAME=gemma2:9b
+UPLOAD_DIR=./uploads
+```
+
+### 3. Installation
+**Backend Setup:**
+```bash
+# Recommended: Create a virtual environment
+python -m venv .venv
+source .venv/bin/activate  # Or .venv\Scripts\activate on Windows
+
+# Install dependencies
+pip install -r requirements.txt
+```
+
+**Frontend Setup:**
+```bash
+cd frontend
+npm install
+```
+
+### 4. Running the Application
+**Start Backend:**
+```bash
+python backend/main.py
+```
+
+**Start Frontend:**
+```bash
+cd frontend
+npm run dev
+```
+
+Visit `http://localhost:3000` to access the Finn dashboard.
+
+## 📂 Project Structure
+- `backend/`: FastAPI application, models, and AI pipelines.
+- `frontend/src/app/`: Next.js pages and dashboard components.
+- `frontend/src/components/`: Shared UI components (ConfirmModal, etc.).
+- `uploads/`: Temporary storage for receipt processing.
+
+---

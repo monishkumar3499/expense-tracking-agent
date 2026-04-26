@@ -12,6 +12,8 @@ class TransactionBase(BaseModel):
     source: str = "manual"
     description: str = ""
     file_id: str = ""
+    bill_name: str = ""
+    bill_total: float = 0.0
     tax_deductible: bool = False
     tax_section: str = ""
 
@@ -27,18 +29,6 @@ class Transaction(TransactionBase):
 class TransactionList(BaseModel):
     transactions: List[TransactionCreate]
 
-class BudgetBase(BaseModel):
-    category: str
-    monthly_limit: float
-    alert_threshold: float = 0.8
-
-class BudgetCreate(BudgetBase):
-    pass
-
-class Budget(BudgetBase):
-    id: str
-    class Config:
-        from_attributes = True
 
 class GoalBase(BaseModel):
     name: str
@@ -76,3 +66,31 @@ class RecurringExpense(RecurringExpenseBase):
     is_active: bool
     class Config:
         from_attributes = True
+
+class FinancialGoalBase(BaseModel):
+    timeline: str   # 1_month, 6_months, 1_year
+    total_budget: float
+    category_budgets: dict = {}   # {"Food": 1000, ...}
+    start_date: date
+    end_date: date
+
+class FinancialGoalCreate(FinancialGoalBase):
+    pass
+
+class FinancialGoal(FinancialGoalBase):
+    id: str
+    status: str = "active"
+    created_at: datetime
+    class Config:
+        from_attributes = True
+
+class CategoryProgress(BaseModel):
+    budget: float
+    spent: float
+    percentage: float
+
+class FinancialGoalDetail(FinancialGoal):
+    total_spent: float
+    progress_percentage: float
+    category_progress: dict[str, CategoryProgress]
+    health_score: float # 0-100, where 100 is good (under budget)

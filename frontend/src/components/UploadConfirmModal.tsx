@@ -21,15 +21,19 @@ interface Props {
         transactions: Transaction[]
         document_type: string
         file_id: string
+        bill_name?: string
+        bill_total?: number
     }
     onSaved: () => void
 }
 
 export default function UploadConfirmModal({ isOpen, onClose, extractedData, onSaved }: Props) {
     const [txns, setTxns] = useState<Transaction[]>(extractedData?.transactions || [])
+    const [billName, setBillName] = useState(extractedData?.bill_name || '')
 
     useEffect(() => {
         if (extractedData?.transactions) setTxns(extractedData.transactions)
+        if (extractedData?.bill_name) setBillName(extractedData.bill_name)
     }, [extractedData])
 
     if (!isOpen) return null
@@ -42,9 +46,16 @@ export default function UploadConfirmModal({ isOpen, onClose, extractedData, onS
 
     const handleSave = async () => {
         const loading = toast.loading('Syncing to ledger...')
+        const finalTotal = txns.reduce((acc, t) => acc + t.amount, 0)
         try {
             await api.post('/api/upload/confirm', { 
-                transactions: txns.map(t => ({ ...t, file_id: extractedData?.file_id, source: extractedData?.document_type })) 
+                transactions: txns.map(t => ({ 
+                    ...t, 
+                    file_id: extractedData?.file_id, 
+                    source: extractedData?.document_type,
+                    bill_name: billName,
+                    bill_total: finalTotal
+                })) 
             })
             toast.success('Synced successfully', { id: loading })
             onSaved()
@@ -58,11 +69,14 @@ export default function UploadConfirmModal({ isOpen, onClose, extractedData, onS
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-300">
             <div className="bg-[#171717] border border-[#262626] rounded-3xl w-full max-w-4xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
                 <div className="p-8 border-b border-[#262626] flex items-center justify-between">
-                    <div>
+                    <div className="flex-1">
                         <h2 className="text-xl font-bold">Review Transactions</h2>
-                        <p className="text-xs text-[#737373] uppercase tracking-widest mt-1 font-bold">
-                            {extractedData?.document_type?.replace('_', ' ') || 'Document'} detected
-                        </p>
+                        <input 
+                            value={billName}
+                            onChange={(e) => setBillName(e.target.value)}
+                            placeholder="Receipt Name (e.g. Weekly Groceries)"
+                            className="bg-transparent border-none text-[#cc9966] text-xs uppercase tracking-widest mt-1 font-bold w-full outline-none focus:ring-0 placeholder:text-[#404040]"
+                        />
                     </div>
                     <button onClick={onClose} className="text-[#404040] hover:text-white transition-colors">
                         <X size={24} />
